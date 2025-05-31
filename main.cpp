@@ -3,10 +3,12 @@
 #include <thread> // For std::this_thread::sleep_for
 #include <chrono> // For std::chrono::milliseconds
 #include <conio.h>  // For _kbhit() and _getch() (Windows)
-#include <cstdlib>   // For atexit() - though not strictly needed now without raw mode functions to cleanup
+#include <windows.h> // For Beep()
+#include <cstdlib>   // For atexit() - though not strictly needed now
 
 // Global WPM variable
 int current_wpm = 12;
+const DWORD BEEP_FREQUENCY = 750; // Frequency in Hertz
 
 // Function to calculate dot duration in milliseconds
 int calculate_dot_length_ms(int wpm) {
@@ -18,86 +20,69 @@ int calculate_dot_length_ms(int wpm) {
 
 // Function to play a dot
 void play_dot() {
-    // For Windows, \r might work, but clearing the line needs a different approach
-    // For now, keep it simple, will be addressed in next step
-    std::cout << "DOT "; // Simplified output for now
-    std::cout << '\a' << std::flush; // Attempt to make a sound (ASCII BEL)
-    std::this_thread::sleep_for(std::chrono::milliseconds(calculate_dot_length_ms(current_wpm)));
-    std::cout << "    " << std::flush; // Try to clear "DOT "
+    // \r to return to start of line, then print DOT and spaces to clear previous display_wpm
+    std::cout << "\rDOT                                                                      " << std::flush;
+    Beep(BEEP_FREQUENCY, calculate_dot_length_ms(current_wpm));
 }
 
 // Function to play a dash
 void play_dash() {
-    std::cout << "DASH "; // Simplified output for now
-    std::cout << '\a' << std::flush; // Attempt to make a sound (ASCII BEL)
-    std::this_thread::sleep_for(std::chrono::milliseconds(3 * calculate_dot_length_ms(current_wpm)));
-    std::cout << "     " << std::flush; // Try to clear "DASH "
+    std::cout << "\rDASH                                                                     " << std::flush;
+    Beep(BEEP_FREQUENCY, 3 * calculate_dot_length_ms(current_wpm));
 }
 
 // Function for the space between dots/dashes of the same character
 void inter_element_space() {
-    // This is silent.
+    // This is silent. The Beep() function is synchronous, so it blocks.
+    // The sleep here provides the silent space after the beep has finished.
     std::this_thread::sleep_for(std::chrono::milliseconds(calculate_dot_length_ms(current_wpm)));
-    // No specific clearing here, play_dot/dash clear their own text.
-    // A general clear might be needed before display_wpm.
 }
 
 // Display WPM
 void display_wpm() {
-    // ANSI escape codes like \033[K likely won't work in standard Windows cmd.exe
-    // This will be addressed in the next "Windows Console Output Refinement" step.
-    // For now, print on a new line or use \r if it behaves predictably.
-    std::cout << "\rWPM: " << current_wpm << " ('z' dot, 'x' dash, +/- WPM, 'q' quit)            " << std::flush;
+    // \r to return to start of line, then print WPM status. Ensure enough spaces to clear previous "DOT" or "DASH"
+    std::cout << "\rWPM: " << current_wpm << " ('z' dot, 'x' dash, +/- WPM, 'q' quit)                         " << std::flush;
 }
 
 int main() {
-    // enable_raw_mode(); // Removed, was termios specific
-
-    std::cout << "CW Paddle Emulator (Windows Mode)" << std::endl;
-    // display_wpm(); // Initial display
-    // std::cout << std::endl; // New line after initial messages
+    std::cout << "CW Paddle Emulator (Windows Mode with Beep API)" << std::endl;
+    // Initial display of WPM status on a new line
+    display_wpm();
+    std::cout << std::endl; // Move to next line so first DOT/DASH doesn't overwrite initial display_wpm line
 
     char input_char = 0;
 
     while (true) {
+        // At the start of the loop, or after an action, display_wpm will overwrite the previous line.
+        // The cursor should be at the beginning of the line due to \r in display_wpm.
         display_wpm();
 
-        if (_kbhit()) { // Check if a key has been pressed
-            input_char = _getch(); // Get the character (doesn't echo)
+        if (_kbhit()) {
+            input_char = _getch();
 
             if (input_char == 'z') {
                 play_dot();
                 inter_element_space();
-                // display_wpm(); // Called at the start of the loop
             } else if (input_char == 'x') {
                 play_dash();
                 inter_element_space();
-                // display_wpm();
             } else if (input_char == '+') {
                 current_wpm++;
                 if (current_wpm > 60) current_wpm = 60;
-                // display_wpm();
             } else if (input_char == '-') {
                 if (current_wpm > 1) {
                     current_wpm--;
                 }
-                // display_wpm();
             } else if (input_char == 'q') {
-                std::cout << "\rExiting application.                                   " << std::endl;
+                // Clear the line and print exiting message
+                std::cout << "\rExiting application.                                                        " << std::endl;
                 break;
             }
-            // Special keys (like function keys, arrows) return 0 or 0xE0 (224)
-            // then another char. For 'z', 'x', '+', '-', 'q' this is not an issue.
-            // If other keys were used, we might need:
-            // if (input_char == 0 || input_char == 0xE0) {
-            //     input_char = _getch(); // consume second byte of special key
-            // }
+            // After an action (dot, dash, WPM change), the loop restarts and display_wpm() is called,
+            // which overwrites the "DOT " or "DASH " line.
         } else {
-            // No key pressed, prevent busy-waiting and reduce CPU usage
-            // A very short sleep is advisable.
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
     }
-    // No disable_raw_mode() to call via atexit for conio.h
     return 0;
 }

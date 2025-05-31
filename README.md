@@ -1,6 +1,6 @@
 # C++ CW Paddle Emulator
 
-This is a simple C++ console application that emulates a CW (Morse code) paddle using keyboard input. It features adjustable WPM (Words Per Minute) and uses system-specific methods for immediate key response.
+This is a simple C++ console application that emulates a CW (Morse code) paddle using keyboard input. It features adjustable WPM (Words Per Minute) and uses system-specific methods for immediate key response and sound generation.
 
 ## Features
 
@@ -10,18 +10,20 @@ This is a simple C++ console application that emulates a CW (Morse code) paddle 
     *   '+': Increase WPM
     *   '-': Decrease WPM
 *   **Quit:** 'q'
-*   Audible feedback via ASCII BEL character (system beep).
-*   Direct keyboard input (no need to press Enter):
+*   **Audible Feedback:**
+    *   **Linux/macOS:** ASCII BEL character (system beep).
+    *   **Windows:** Windows `Beep()` API for direct tone generation (default 750 Hz).
+*   **Direct Keyboard Input (no need to press Enter):**
     *   **Linux/macOS:** Uses raw terminal mode via `<termios.h>`.
     *   **Windows:** Uses `<conio.h>` functions (`_kbhit()`, `_getch()`).
 
 ## Compilation
 
-You will need a C++ compiler that supports C++17. The threading library (`-pthread` or equivalent) is needed for `std::this_thread::sleep_for`.
+You will need a C++ compiler that supports C++17.
 
 ### Linux/macOS
 
-This version uses `<termios.h>` for raw keyboard input.
+This version uses `<termios.h>` for raw keyboard input and outputs an ASCII BEL character for sound. The threading library (`-pthread` or equivalent) is needed for `std::this_thread::sleep_for`.
 To compile, navigate to the directory containing `main.cpp` and run:
 
 ```bash
@@ -30,20 +32,21 @@ g++ main.cpp -o cw_paddle -std=c++17 -pthread
 
 ### Windows
 
-This version uses `<conio.h>` for keyboard input. You can compile it using MinGW g++ or Microsoft Visual C++ compiler.
+This version uses `<conio.h>` for keyboard input and the Windows `Beep()` API (from `<windows.h>`) for sound generation. The threading library support for `std::this_thread::sleep_for` is also needed.
+You can compile it using MinGW g++ or Microsoft Visual C++ compiler.
 
 **Using MinGW g++:**
 ```bash
 g++ main.cpp -o cw_paddle_win.exe -std=c++17 -static-libgcc -static-libstdc++
 ```
-(The `-static-libgcc` and `-static-libstdc++` flags can help create a more portable executable by including standard library dependencies. `-pthread` is often implicitly supported or handled by MinGW for `std::thread`).
+(The `-static-libgcc` and `-static-libstdc++` flags can help create a more portable executable. `-pthread` is often implicitly supported by MinGW for `std::thread`. `kernel32.lib`, which provides `Beep`, is linked by default.)
 
 **Using Microsoft Visual C++ (cl.exe):**
 Open a Developer Command Prompt for Visual Studio and run:
 ```bash
 cl main.cpp /EHsc /std:c++17 /Fe:cw_paddle_win.exe
 ```
-(`/Fe:` specifies the output executable name).
+(`/Fe:` specifies the output executable name. `kernel32.lib` is linked by default.)
 
 ## Running the Application
 
@@ -65,7 +68,10 @@ The application will take over your terminal input for the specified keys.
 
 ## Sound
 
-The sound generated is a simple ASCII BEL character (``), which usually triggers a system beep on most systems, including Windows. For more advanced or pleasant sound, you would need to integrate a proper audio library or use platform-specific audio APIs.
+*   **Linux/macOS:** The sound generated is a simple ASCII BEL character (``), which usually triggers a system beep.
+*   **Windows:** The sound is generated using the Windows `Beep(frequency, duration)` API. This provides a more direct and typically more reliable tone. The default frequency is set to 750 Hz in the application.
+
+For more advanced or pleasant sound customization beyond this, especially on Linux/macOS, you would need to integrate a proper audio library.
 
 ## Important Notes
 
