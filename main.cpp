@@ -5,20 +5,22 @@
 #include <cmath>    // For std::sin, M_PI
 #include <thread>
 #include <chrono>
-#include <cstdint> // For std::int16_t
+#include <cstdint>
 #include <conio.h>  // For _kbhit() and _getch() (Windows)
 
-#include <SFML/Audio.hpp> // For SFML sound
+#include <SFML/Audio.hpp>
+// For sf::SoundChannel, usually included by Audio.hpp. If issues, uncomment:
+// #include <SFML/Audio/SoundChannel.hpp>
 
 // Global WPM variable
 int current_wpm = 12;
 
 // SFML Sound globals
 sf::SoundBuffer g_sound_buffer;
-sf::Sound g_cw_sound;
+sf::Sound* g_cw_sound = nullptr; // Changed to pointer, initialized to nullptr
 const double CW_FREQUENCY = 750.0; // Hz
 const unsigned CW_SAMPLE_RATE = 44100; // Samples per second
-const std::int16_t CW_AMPLITUDE = 10000; // Changed sf::Int16 to std::int16_t
+const std::int16_t CW_AMPLITUDE = 10000;
 
 // Function to calculate dot duration in milliseconds
 int calculate_dot_length_ms(int wpm) {
@@ -30,71 +32,76 @@ int calculate_dot_length_ms(int wpm) {
 
 // Initialize SFML sound buffer and sound object
 bool init_sound() {
-    std::vector<std::int16_t> samples; // Changed sf::Int16 to std::int16_t
-
-    // Generate 1 second of sine wave data.
+    std::vector<std::int16_t> samples;
     samples.resize(CW_SAMPLE_RATE * 1); // 1 channel (mono), 1 second duration
 
     for (std::size_t i = 0; i < samples.size(); ++i) {
         double time_s = static_cast<double>(i) / CW_SAMPLE_RATE;
-        // Ensure CW_AMPLITUDE is used in calculation for static_cast
         samples[i] = static_cast<std::int16_t>(static_cast<double>(CW_AMPLITUDE) * std::sin(2 * M_PI * CW_FREQUENCY * time_s));
     }
 
-    if (!g_sound_buffer.loadFromSamples(samples.data(), samples.size(), 1, CW_SAMPLE_RATE)) {
+    // Define the channel map for mono sound for SFML 3.0 loadFromSamples
+    std::vector<sf::SoundChannel> channelMap = {sf::SoundChannel::Mono};
+
+    // Use 5-argument version of loadFromSamples for SFML 3.0
+    if (!g_sound_buffer.loadFromSamples(samples.data(), samples.size(), 1, CW_SAMPLE_RATE, channelMap)) {
         std::cerr << "Error: Could not load audio samples into SFML buffer." << std::endl;
-        return false;
+        return false; // g_cw_sound is still nullptr here
     }
 
-    g_cw_sound.setBuffer(g_sound_buffer); // Set the buffer for the sound object
-    g_cw_sound.setLooping(true); // Changed from setLoop to setLooping for SFML 3.0
+    // Dynamically allocate and initialize g_cw_sound using the buffer
+    g_cw_sound = new sf::Sound(g_sound_buffer);
+    // The constructor sf::Sound(const sf::SoundBuffer&) sets the buffer.
+    // So, g_cw_sound->setBuffer(g_sound_buffer); is not needed here.
+
+    g_cw_sound->setLooping(true);
     return true;
 }
-
 
 // Function to play a dot
 void play_dot() {
     std::cout << "\rDOT                                                                      " << std::flush;
-    // Changed sf::Sound::Playing to sf::SoundSource::Status::Playing for SFML 3.0
-    if (g_cw_sound.getStatus() != sf::SoundSource::Status::Playing) {
-        g_cw_sound.play();
+    if (g_cw_sound && g_cw_sound->getStatus() != sf::SoundSource::Status::Playing) {
+        g_cw_sound->play();
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(calculate_dot_length_ms(current_wpm)));
-    g_cw_sound.stop();
+    if (g_cw_sound) {
+        g_cw_sound->stop();
+    }
 }
 
 // Function to play a dash
 void play_dash() {
     std::cout << "\rDASH                                                                     " << std::flush;
-    // Changed sf::Sound::Playing to sf::SoundSource::Status::Playing for SFML 3.0
-    if (g_cw_sound.getStatus() != sf::SoundSource::Status::Playing) {
-        g_cw_sound.play();
+    if (g_cw_sound && g_cw_sound->getStatus() != sf::SoundSource::Status::Playing) {
+        g_cw_sound->play();
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(3 * calculate_dot_length_ms(current_wpm)));
-    g_cw_sound.stop();
+    if (g_cw_sound) {
+        g_cw_sound->stop();
+    }
 }
 
 // Function for the space between dots/dashes of the same character
 void inter_element_space() {
-    // This is silent.
     std::this_thread::sleep_for(std::chrono::milliseconds(calculate_dot_length_ms(current_wpm)));
 }
 
 // Display WPM
 void display_wpm() {
-    // \r to return to start of line, then print WPM status. Ensure enough spaces to clear previous "DOT" or "DASH"
     std::cout << "\rWPM: " << current_wpm << " ('z' dot, 'x' dash, +/- WPM, 'q' quit)                         " << std::flush;
 }
 
 int main() {
     if (!init_sound()) {
         // Error message already printed by init_sound()
+        // g_cw_sound would be nullptr if init_sound fails before allocation, so no delete needed here.
         return 1;
     }
 
     std::cout << "CW Paddle Emulator (Windows Mode with SFML Sound)" << std::endl;
     display_wpm();
-    std::cout << std::endl; // Move to next line so first DOT/DASH doesn't overwrite initial display_wpm line
+    std::cout << std::endl;
 
     char input_char = 0;
 
@@ -124,6 +131,11 @@ int main() {
         } else {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
+    }
+
+    if (g_cw_sound) { // Clean up the dynamically allocated sound object
+        delete g_cw_sound;
+        g_cw_sound = nullptr;
     }
     return 0;
 }
