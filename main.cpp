@@ -1,13 +1,12 @@
 #include <iostream>
 #include <string>
-#include <vector> // For std::vector with SFML samples
+#include <vector>
 #define _USE_MATH_DEFINES // For M_PI with MSVC, place before cmath
 #include <cmath>    // For std::sin, M_PI
 #include <thread>
 #include <chrono>
+#include <cstdint> // For std::int16_t
 #include <conio.h>  // For _kbhit() and _getch() (Windows)
-// #include <windows.h> // No longer needed for Beep()
-#include <cstdlib>   // For atexit() or other general utilities, kept for now
 
 #include <SFML/Audio.hpp> // For SFML sound
 
@@ -19,7 +18,7 @@ sf::SoundBuffer g_sound_buffer;
 sf::Sound g_cw_sound;
 const double CW_FREQUENCY = 750.0; // Hz
 const unsigned CW_SAMPLE_RATE = 44100; // Samples per second
-const sf::Int16 CW_AMPLITUDE = 10000; // Amplitude for sf::Int16 samples
+const std::int16_t CW_AMPLITUDE = 10000; // Changed sf::Int16 to std::int16_t
 
 // Function to calculate dot duration in milliseconds
 int calculate_dot_length_ms(int wpm) {
@@ -31,16 +30,15 @@ int calculate_dot_length_ms(int wpm) {
 
 // Initialize SFML sound buffer and sound object
 bool init_sound() {
-    std::vector<sf::Int16> samples;
+    std::vector<std::int16_t> samples; // Changed sf::Int16 to std::int16_t
+
     // Generate 1 second of sine wave data.
-    // Looping the sound makes the buffer duration somewhat arbitrary,
-    // as long as it's not excessively short or long.
-    // Using a fixed duration buffer that is looped.
     samples.resize(CW_SAMPLE_RATE * 1); // 1 channel (mono), 1 second duration
 
     for (std::size_t i = 0; i < samples.size(); ++i) {
         double time_s = static_cast<double>(i) / CW_SAMPLE_RATE;
-        samples[i] = static_cast<sf::Int16>(CW_AMPLITUDE * std::sin(2 * M_PI * CW_FREQUENCY * time_s));
+        // Ensure CW_AMPLITUDE is used in calculation for static_cast
+        samples[i] = static_cast<std::int16_t>(static_cast<double>(CW_AMPLITUDE) * std::sin(2 * M_PI * CW_FREQUENCY * time_s));
     }
 
     if (!g_sound_buffer.loadFromSamples(samples.data(), samples.size(), 1, CW_SAMPLE_RATE)) {
@@ -48,8 +46,8 @@ bool init_sound() {
         return false;
     }
 
-    g_cw_sound.setBuffer(g_sound_buffer);
-    g_cw_sound.setLoop(true); // Loop the sound so it plays continuously until stopped
+    g_cw_sound.setBuffer(g_sound_buffer); // Set the buffer for the sound object
+    g_cw_sound.setLooping(true); // Changed from setLoop to setLooping for SFML 3.0
     return true;
 }
 
@@ -57,7 +55,8 @@ bool init_sound() {
 // Function to play a dot
 void play_dot() {
     std::cout << "\rDOT                                                                      " << std::flush;
-    if (g_cw_sound.getStatus() != sf::Sound::Playing) {
+    // Changed sf::Sound::Playing to sf::SoundSource::Status::Playing for SFML 3.0
+    if (g_cw_sound.getStatus() != sf::SoundSource::Status::Playing) {
         g_cw_sound.play();
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(calculate_dot_length_ms(current_wpm)));
@@ -67,7 +66,8 @@ void play_dot() {
 // Function to play a dash
 void play_dash() {
     std::cout << "\rDASH                                                                     " << std::flush;
-    if (g_cw_sound.getStatus() != sf::Sound::Playing) {
+    // Changed sf::Sound::Playing to sf::SoundSource::Status::Playing for SFML 3.0
+    if (g_cw_sound.getStatus() != sf::SoundSource::Status::Playing) {
         g_cw_sound.play();
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(3 * calculate_dot_length_ms(current_wpm)));
@@ -89,7 +89,6 @@ void display_wpm() {
 int main() {
     if (!init_sound()) {
         // Error message already printed by init_sound()
-        // std::cerr << "Failed to initialize sound. Exiting." << std::endl;
         return 1;
     }
 
