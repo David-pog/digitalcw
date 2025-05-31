@@ -1,14 +1,25 @@
 #include <iostream>
 #include <string>
-#include <thread> // For std::this_thread::sleep_for
-#include <chrono> // For std::chrono::milliseconds
+#include <vector> // For std::vector with SFML samples
+#define _USE_MATH_DEFINES // For M_PI with MSVC, place before cmath
+#include <cmath>    // For std::sin, M_PI
+#include <thread>
+#include <chrono>
 #include <conio.h>  // For _kbhit() and _getch() (Windows)
-#include <windows.h> // For Beep()
-#include <cstdlib>   // For atexit() - though not strictly needed now
+// #include <windows.h> // No longer needed for Beep()
+#include <cstdlib>   // For atexit() or other general utilities, kept for now
+
+#include <SFML/Audio.hpp> // For SFML sound
 
 // Global WPM variable
 int current_wpm = 12;
-const DWORD BEEP_FREQUENCY = 750; // Frequency in Hertz
+
+// SFML Sound globals
+sf::SoundBuffer g_sound_buffer;
+sf::Sound g_cw_sound;
+const double CW_FREQUENCY = 750.0; // Hz
+const unsigned CW_SAMPLE_RATE = 44100; // Samples per second
+const sf::Int16 CW_AMPLITUDE = 10000; // Amplitude for sf::Int16 samples
 
 // Function to calculate dot duration in milliseconds
 int calculate_dot_length_ms(int wpm) {
@@ -18,23 +29,54 @@ int calculate_dot_length_ms(int wpm) {
     return 1200 / wpm;
 }
 
+// Initialize SFML sound buffer and sound object
+bool init_sound() {
+    std::vector<sf::Int16> samples;
+    // Generate 1 second of sine wave data.
+    // Looping the sound makes the buffer duration somewhat arbitrary,
+    // as long as it's not excessively short or long.
+    // Using a fixed duration buffer that is looped.
+    samples.resize(CW_SAMPLE_RATE * 1); // 1 channel (mono), 1 second duration
+
+    for (std::size_t i = 0; i < samples.size(); ++i) {
+        double time_s = static_cast<double>(i) / CW_SAMPLE_RATE;
+        samples[i] = static_cast<sf::Int16>(CW_AMPLITUDE * std::sin(2 * M_PI * CW_FREQUENCY * time_s));
+    }
+
+    if (!g_sound_buffer.loadFromSamples(samples.data(), samples.size(), 1, CW_SAMPLE_RATE)) {
+        std::cerr << "Error: Could not load audio samples into SFML buffer." << std::endl;
+        return false;
+    }
+
+    g_cw_sound.setBuffer(g_sound_buffer);
+    g_cw_sound.setLoop(true); // Loop the sound so it plays continuously until stopped
+    return true;
+}
+
+
 // Function to play a dot
 void play_dot() {
-    // \r to return to start of line, then print DOT and spaces to clear previous display_wpm
     std::cout << "\rDOT                                                                      " << std::flush;
-    Beep(BEEP_FREQUENCY, calculate_dot_length_ms(current_wpm));
+    if (g_cw_sound.getStatus() != sf::Sound::Playing) {
+        g_cw_sound.play();
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(calculate_dot_length_ms(current_wpm)));
+    g_cw_sound.stop();
 }
 
 // Function to play a dash
 void play_dash() {
     std::cout << "\rDASH                                                                     " << std::flush;
-    Beep(BEEP_FREQUENCY, 3 * calculate_dot_length_ms(current_wpm));
+    if (g_cw_sound.getStatus() != sf::Sound::Playing) {
+        g_cw_sound.play();
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(3 * calculate_dot_length_ms(current_wpm)));
+    g_cw_sound.stop();
 }
 
 // Function for the space between dots/dashes of the same character
 void inter_element_space() {
-    // This is silent. The Beep() function is synchronous, so it blocks.
-    // The sleep here provides the silent space after the beep has finished.
+    // This is silent.
     std::this_thread::sleep_for(std::chrono::milliseconds(calculate_dot_length_ms(current_wpm)));
 }
 
@@ -45,16 +87,19 @@ void display_wpm() {
 }
 
 int main() {
-    std::cout << "CW Paddle Emulator (Windows Mode with Beep API)" << std::endl;
-    // Initial display of WPM status on a new line
+    if (!init_sound()) {
+        // Error message already printed by init_sound()
+        // std::cerr << "Failed to initialize sound. Exiting." << std::endl;
+        return 1;
+    }
+
+    std::cout << "CW Paddle Emulator (Windows Mode with SFML Sound)" << std::endl;
     display_wpm();
     std::cout << std::endl; // Move to next line so first DOT/DASH doesn't overwrite initial display_wpm line
 
     char input_char = 0;
 
     while (true) {
-        // At the start of the loop, or after an action, display_wpm will overwrite the previous line.
-        // The cursor should be at the beginning of the line due to \r in display_wpm.
         display_wpm();
 
         if (_kbhit()) {
@@ -74,12 +119,9 @@ int main() {
                     current_wpm--;
                 }
             } else if (input_char == 'q') {
-                // Clear the line and print exiting message
                 std::cout << "\rExiting application.                                                        " << std::endl;
                 break;
             }
-            // After an action (dot, dash, WPM change), the loop restarts and display_wpm() is called,
-            // which overwrites the "DOT " or "DASH " line.
         } else {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
